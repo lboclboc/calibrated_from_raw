@@ -1,0 +1,272 @@
+// macro: Masterflats_from CR2 files
+
+// This macro makes rggb demosaiced masterflats from raw files
+
+// macro by Lars Karlsson
+// to use with the software AstroImageJ for astrophoto editing
+// its main use is to read raw files from DSLR cameras
+// my first attempt to make a macro that read a batch of Canon CR2 files
+
+// History:
+// version 20170930
+// Only added history text here
+//
+// version 20161101
+// First release
+
+print(" ");
+print("Version 20161101");
+
+print(" ");
+print("visit my homepage to get latest version:");
+print("http://astrofriend.eu/astronomy/tutorials/tutorial-astroimagej/tutorial-aij-03-my-own-macros.html");
+
+// there is also an instruction how to use this macro
+// use it by your own risk, have backup of your files!
+
+// Setupdata:
+// Note: Only works with some Canon EOS yet, Canon 350D, 5D and 6D tested
+filetype = ".cr2"; // set extension to your camera .cr2=Canon, .nef=Nikon,....
+
+// set this string with correct data, added to filename if enabled below
+camera = " 5D";
+telescope = " Pentax500";
+aperaturevalue = " av45";
+iso = " iso800";
+date = " 20130406";
+extrainfo = " Panstarrs";
+
+// use one of following to your filename, this "//" will exclude the line
+// equipment = camera + telescope + aperaturevalue + iso + date + extrainfo;
+equipment = ""; // no extra info in filename
+
+// ********************* first part: start reading raw sub flat files *******************************
+
+//Get File Directory with raw flat images
+dirSourch = getDirectory("Select Input Flat raw files Directory");
+fileList = getFileList(dirSourch);
+
+// work to be done on image
+work1 = "Batch read sub flat raw cr2 files and convert to CFA tiff 16 bit save";
+
+print(" ");
+print(work1 + " - Starting");
+print("Reading raw files from : " + dirSourch);
+
+dirDestCfa = dirSourch + "cfa" + File.separator;
+File.makeDirectory(dirDestCfa);
+print("Create directory: " + dirDestCfa);
+
+// set to true and it will be fast, set to false and you can follow the process when in work
+setBatchMode(true);
+
+fileNumber = 0; // all files in directory
+extno=0; // number of only correct file extension
+
+while (fileNumber < fileList.length) {
+	id = fileList[fileNumber++];
+	extend=lengthOf(id);
+	dotIndex = indexOf(id, ".");
+
+	if (dotIndex >= 0) {
+		ext = substring(id, extend-4, extend);
+		extno=extno+1;
+	}
+	else {
+		ext = "subdirectory";
+	}
+
+// process only correct files if not canon change to other extension
+	if (ext==filetype) {
+
+	readRawFiles(dirSourch,id);
+
+	saveAs("Tiff", dirDestCfa + "cfa_" + toString(1000+extno));
+	close();
+
+	print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + id + " saved as: " + "cfa_" + toString(1000+extno) +".tif");
+	}
+	else
+	print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + id + " excluded");
+	}
+
+print(work1 + " - Completed");
+
+// END first part
+
+
+// ************** second part: converting cfa tiff to rggb calibrated masterflat files ***********************
+
+work2 = "Convert virtual stack subflat CFA tiff to rggb, bias calibrate and normalize to a master flat 32 bit tiff file and save";
+print(" ");
+print(work2 + " - Starting");
+print("Reading from : Stack");
+
+//Get File output directory
+dirDestmasterFlat = dirSourch + "masterFlat" + File.separator;
+File.makeDirectory(dirDestmasterFlat);
+print("create ouput dir: " + dirDestmasterFlat);
+
+
+masterFlatRedTitle = "masterFlatRed" + equipment;
+masterFlatGreen1Title = "masterFlatGreen1" + equipment;
+masterFlatGreen2Title = "masterFlatGreen2" + equipment;
+masterFlatBlueTitle = "masterFlatBlue" + equipment;
+
+print(" ");
+print("File names of MasterFlats:");
+print("filename Red: " +masterFlatRedTitle);
+print("filename Green1: " +masterFlatGreen1Title);
+print("filename Green2: " +masterFlatGreen2Title);
+print("filename Blue: " +masterFlatBlueTitle);
+
+
+
+// open earlier saved tiff files as a virtual stack
+run("Image Sequence...", "open=[" + dirDestCfa + "] number=extno starting=1 increment=1 scale=100 file=[] or=[] sort use");
+
+print(" ");
+print("open cfa files as virtual stack");
+print(" ");
+
+//	debayer order rg1g2b (Canon)
+
+	idSrc = getImageID();
+	makeColorChannel("Red", 0, 0);
+
+	makeMasterFlat();
+	replaceAbnormValues(masterFlatRedTitle);
+	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
+	if (isOpen("lowvalues")) {selectImage("lowvalues"); close(); }
+	if (isOpen("masterFlat_cal")) {selectImage("masterFlat_cal"); close(); }
+	selectImage(masterFlatRedTitle);
+	saveAs("Tiff", dirDestmasterFlat + masterFlatRedTitle);
+	close();
+	print(masterFlatRedTitle + " is saved as 32 bit floating point, center normalized to 1, abnorm values cut off");
+
+	selectImage(idSrc); 
+	makeColorChannel("Green1", -1, 0);
+	makeMasterFlat();
+	replaceAbnormValues(masterFlatGreen1Title);
+	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
+	if (isOpen("lowvalues")) {selectImage("lowvalues"); close(); }
+	if (isOpen("masterFlat_cal")) {selectImage("masterFlat_cal"); close(); }
+	selectImage(masterFlatGreen1Title);
+	saveAs("Tiff", dirDestmasterFlat + masterFlatGreen1Title);
+	close();
+	print(masterFlatGreen1Title + " is saved as 32 bit floating point, center normalized to 1, abnorm values cut off");
+
+	selectImage(idSrc);
+	makeColorChannel("Green2", 0, -1);
+	makeMasterFlat();
+	replaceAbnormValues(masterFlatGreen2Title);
+	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
+	if (isOpen("lowvalues")) {selectImage("lowvalues"); close(); }
+	if (isOpen("masterFlat_cal")) {selectImage("masterFlat_cal"); close(); }
+	selectImage(masterFlatGreen2Title);
+	saveAs("Tiff", dirDestmasterFlat + masterFlatGreen2Title);
+	close();
+	print(masterFlatGreen2Title + " is saved as 32 bit floating point, center normalized to 1, abnorm values cut off");
+
+	selectImage(idSrc);
+	makeColorChannel("Blue", -1, -1);
+	makeMasterFlat();
+	replaceAbnormValues(masterFlatBlueTitle);
+	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
+	if (isOpen("lowvalues")) {selectImage("lowvalues"); close(); }
+	if (isOpen("masterFlat_cal")) {selectImage("masterFlat_cal"); close(); }
+	selectImage(masterFlatBlueTitle);
+	saveAs("Tiff", dirDestmasterFlat +masterFlatBlueTitle);
+	close();
+	print(masterFlatBlueTitle + " is saved as 32 bit floating point, center normalized to 1, abnorm values cut off");
+
+if (isOpen("cfa")) {selectImage("cfa"); close(); }
+
+
+setBatchMode(false);
+
+print(" ");
+print(work2 + " - Completed");
+print("there is no need anymore of the cfa libary, you can erase it");
+print("masterflats saved in your raw files directory: " + dirDestmasterFlat);
+
+
+
+// ************* functions *********************************************************************************
+
+// This is the heart of reading raw DSLR files
+// I got it from http://ij-plugins.sourceforge.net/plugins/dcraw/
+// small modifications by me to handle batch reading
+// You must have it downloaded and installed
+// [] because of spaces in filename
+	function readRawFiles(dir,filename) {
+		run("DCRaw Reader...",
+		"open=[" + dir + filename + "] " +
+		"use_temporary_directory " +
+		"white_balance=[None] " +
+		"do_not_automatically_brighten " +
+		"output_colorspace=[raw] " +
+		"document_mode " +  // black borders or not
+		"document_mode_without_scaling " +
+		"read_as=[16-bit linear] " +
+		"interpolation=[High-speed, low-quality bilinear] " +
+//       	"half_size " +
+		"do_not_rotate " +
+//      	"show_metadata" +
+		"");
+	}
+
+
+// function half size and demosaic stack
+	function makeColorChannel(name, dx, dy) {
+		n = nSlices();
+		halfWidth = getWidth()/2;
+		halfHeight = getHeight()/2;
+		run("Duplicate...", "title=&name duplicate range=1-&n");
+		run("Translate...", "x=&dx y=&dy interpolation=None stack");
+		run("Size...", "width=&halfWidth height=&halfHeight depth=&n interpolation=None");
+		rename("deMosaic");
+	}
+
+
+// function makeMasterFlat
+	function makeMasterFlat() {
+	selectImage("deMosaic");
+	n=nSlices();
+	run("32-bit");
+	getSelectionBounds(x, y, width, height) ;
+	for (i=1; i<=n; i++) {
+		setSlice(i);
+		// select left black border (overscan area), tested on Canon EOS 350D, 5D, 6D
+		makeRectangle(3, 20, 20, height-40);
+		getRawStatistics(pix,mean,min,max,std,hist);
+		run("Select None");
+		run("Subtract...", "value=mean"); // subtract bias
+	}
+
+	getSelectionBounds(x, y, width, height);
+	for (i=1; i<=n; i++) {
+		setSlice(i);
+		// select central part to normvalue
+		makeRectangle(0.3*width, 0.3*height, 0.4*width, 0.4*height);
+		getRawStatistics(pix,mean,min,max,std,hist);
+		run("Select None");
+		run("Divide...", "value=mean"); // normalize to 1
+	}
+
+	setSlice(1);
+	run("Z Project...", "start=1 stop=n projection=Median");
+	rename("masterFlat_cal");
+	}
+
+
+// function replace Abnorm low values
+	function replaceAbnormValues(namenew) {
+	selectImage("masterFlat_cal");
+	width = getWidth();
+	height = getHeight();
+	newImage("lowvalues", "32-bit Black", width, height, 1);
+	run("Add...", "value=0.3"); // reject lower vignetted valus and replace them
+	imageCalculator("Max create", "masterFlat_cal", "lowvalues");
+	rename(namenew);
+	}
