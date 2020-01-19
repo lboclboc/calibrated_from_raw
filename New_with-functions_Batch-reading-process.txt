@@ -264,9 +264,9 @@ dirDestRaw = dirSourch + "raw" + File.separator; // raw directory, place your ra
 File.makeDirectory(dirDestRaw);
 print("Create output raw directory: " + dirDestRaw);
 
-dirDestAligne = dirSourch + "aligne" + File.separator; // aligne directory, place your aligned files here
-File.makeDirectory(dirDestAligne);
-print("Create output aligne directory: " + dirDestAligne);
+dirDestAlign = dirSourch + "align" + File.separator; // align directory, place your align files here
+File.makeDirectory(dirDestAlign);
+print("Create output align directory: " + dirDestAlign);
 
 dirDestStack = dirSourch + "stack" + File.separator; // stack directory, place your stacked files here
 File.makeDirectory(dirDestStack);
