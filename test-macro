@@ -1,2 +1,4 @@
 #!/bin/bash
-exec java -jar ~/Downloads/AstroImageJ/ij.jar -macro "$(realpath "$1")"
+macro="$(realpath "$1")"
+cd $(dirname $0)/AstroImageJ
+exec java -jar ij.jar -macro "$macro"
