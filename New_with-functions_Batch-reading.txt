@@ -1,19 +1,19 @@
-// macro: Calibrated_object files from Canon CR2 raw files
-// This macro read Canon EOS raw files and convert them to 16 bit tiff. 
-// Then dark and bias with only dithering technic, flat calibrate them and then save as 32 bit tiff
-
-print("This macro read Canon EOS raw files and convert them to 16 bit Tiff file");
-print("Then dark and bias with only dithering technic, flat calibrate them and then save as 32 bit tiff");
-
+// macro: Calibrated demosaiced rggb files from DSLR raw files
 // macro by Lars Karlsson
 // to use with the software AstroImageJ for astrophoto calibrating, demosaic
-// its main use is to read raw files from DSLR cameras
-// my first attempt to make a macro that read a batch of Canon CR2 files
 
+print("This macro batch read Canon EOS raw files and convert them to 16 bit tiff");
+print("Then demosaic, dark and bias with only dithering technic, flat calibrate and then save as 32 bit float tiff");
+print("To get this to work the image must be taken with dithering technic and read overscan area in raw file");
+print("Only tested on Canon EOS 350D, 5D and 6D, maybe work for other DSLR that have an overscan region");
+print("Its main use is to read raw files from DSLR cameras without need of dark and bis images");
 print(" ");
-print("version 20200116"); // latest
+print("version 20200208"); // latest
 
 // History:
+// version 20200208
+// rewritten  with more functions
+//
 // version 20200112
 // new menu to make it easier to use
 //
@@ -40,54 +40,141 @@ print("version 20200116"); // latest
 print(" ");
 print("visit my homepage to get latest version:");
 print("http://astrofriend.eu/astronomy/tutorials/tutorial-astroimagej/tutorial-aij-03-my-own-macros.html");
+print("There is also an instruction how to use this macro, use it by your own risk, have a backup of your files!");
 
-// there is also an instruction how to use this macro
-// use it by your own risk, have backup of your files!
-
-// Note this marcro dark and bias calibrate the objectfile without and dark and bias files
-// to get this to work the image must be taken with dithering technic
-
-
-
-print ("Start batch reading process");
 getDateAndTime(year,month,dow,day,h,m,s,msec);
-t = ""+year+"-"+month+"-"+day+"T"+h+":"+m+":"+s;
+t = "Process started: "+year+"-"+month+"-"+day+"Time: "+h+":"+m+":"+s;
 print("\n-------------------- "+t+" --------------------");
+print(" ");
+print("Start batch reading process");
 
-// ********************* Setup default directories which you often use *********************
-rawImagesDirectory = "K:/Astro processed raw and fit/../";
-masterFlatDirectory = "K:/Astro calibration/Master/../";
+// ********** Setup default directories which you often use **********
+rawImagesDirectory  = "K:/Astro processed raw and fit/../"; // Set this directory to your own where you have your raw images
+masterFlatDirectory = "K:/Astro calibration/Master/../"; // Set this directory to your own where you have your master flat images
 
 print(" ");
 print("Default raw files directory: " + rawImagesDirectory);
 print("Default masterflat directory: " + masterFlatDirectory);
+print(" ");
 
 //call("ij.io.OpenDialog.setDefaultDirectory", rawImagesDirectory);
 //call("ij.io.OpenDialog.setDefaultDirectory", masterFlatDirectory);
 
 
+// ********** Setup input numbers and file directories **********
 
-
-print ("Setup input numbers and file directories:");
+print ("Setup default input numbers and file directories:");
 
 // Input file format
-// Note: Only works with some Canon EOS yet, Canon 350D, 5D and 6D tested
-fileformat = newArray(4);
-fileformat[0] = ".tif"; // TIFF from eralier run of process
-fileformat[1] = ".cr2"; // Canon raw format
-fileformat[2] = ".nef"; // Nikon raw format (experimental)
-fileformat[3] = ".arw"; // Sony raw format (experimental)
+// Note: Only tested with Canon EOS 350D, 5D and 6D
+
+overScan = 1; // Read the overscan area in raw files, needed to do bias and dark subtraction without bias and dark files
+
+fileformat = newArray(6);
+fileformat[0] = "CFA TIFF 14>16 bit RGGB"; // TIFF from earlier run of process
+fileformat[1] = "CFA TIFF 12>16 bit RGGB"; // TIFF from earlier run of process
+fileformat[2] = "Canon 12-bit .CR2";  // Canon raw format
+fileformat[3] = "Canon 14-bit .CR2";  // Canon raw format
+fileformat[4] = "Nikon 14-bit .NEF";   // Nikon raw format (experimental)
+fileformat[5] = "SONY 14-bit .ARW"; // Sony raw format (experimental)
+
+dataTIFF1216bitRGGB     = newArray(8); // CFA TIFF 16-bit RGGB file
+dataTIFF1216bitRGGB[0] = "CFA TIFF 14>16 bit RGGB"; 
+dataTIFF1216bitRGGB[1] = ".tif"; // raw file format
+dataTIFF1216bitRGGB[2] = 16; // bit per pixel
+dataTIFF1216bitRGGB[3] = 256; // bias
+dataTIFF1216bitRGGB[4] = "rggb"; // Bayer pattern
+dataTIFF1216bitRGGB[5] = 5;  // Overscan area column start
+dataTIFF1216bitRGGB[6] = 10; // Overscan area row start
+dataTIFF1216bitRGGB[7] = 32; // Overscan area column width
+
+dataTIFF1416bitRGGB     = newArray(8); // CFA TIFF 16-bit RGGB file
+dataTIFF1416bitRGGB[0] = "CFA TIFF 12>16 bit RGGB"; 
+dataTIFF1416bitRGGB[1] = ".tif"; // raw file format
+dataTIFF1416bitRGGB[2] = 16; // bit per pixel
+dataTIFF1416bitRGGB[3] = 2048; // bias
+dataTIFF1416bitRGGB[4] = "rggb"; // Bayer pattern
+dataTIFF1416bitRGGB[5] = 5;  // Overscan area column start
+dataTIFF1416bitRGGB[6] = 10; // Overscan area row start
+dataTIFF1416bitRGGB[7] = 32; // Overscan area column width
+
+dataCanon12cr2     = newArray(8); // Canon camera12-bit data .cr2 file
+dataCanon12cr2[0] = "Canon 12-bit .CR2"; 
+dataCanon12cr2[1] = ".cr2"; // raw file format
+dataCanon12cr2[2] = 12; // bit per pixel
+dataCanon12cr2[3] = 256; // bias
+dataCanon12cr2[4] = "rggb"; // Bayer pattern
+dataCanon12cr2[5] = 5;  // Overscan area column start
+dataCanon12cr2[6] = 10; // Overscan area row start
+dataCanon12cr2[7] = 32; // Overscan area column width
+
+dataCanon14cr2     = newArray(8); // Canon camera14-bit data .cr2 file
+dataCanon14cr2[0] = "Canon 14-bit .CR2"; 
+dataCanon14cr2[1] = ".cr2"; // raw file format
+dataCanon14cr2[2] = 14; // bit per pixel
+dataCanon14cr2[3] = 2048; // bias
+dataCanon14cr2[4] = "rggb"; // Bayer pattern
+dataCanon14cr2[5] = 5;  // Overscan area column start
+dataCanon14cr2[6] = 10; // Overscan area row start
+dataCanon14cr2[7] = 32; // Overscan area column width
+
+dataNikon14nef     = newArray(8); // Nikon camera14-bit data .nef file
+dataNikon14nef[0] = "Nikon 14-bit .NEF"; 
+dataNikon14nef[1] = ".nef"; // raw file format
+dataNikon14nef[2] = 14; // bit per pixel
+dataNikon14nef[3] = 2048; // bias
+dataNikon14nef[4] = "rggb"; // Bayer pattern
+dataNikon14nef[5] = 1;  // Overscan area column start
+dataNikon14nef[6] = 10; // Overscan area row start
+dataNikon14nef[7] = 3; // Overscan area column width
+
+dataSony14arw     = newArray(8); // Sony camera14-bit data .arw file
+dataSony14arw[0] = "SONY 14-bit .ARW"; 
+dataSony14arw[1] = ".arw"; // raw file format
+dataSony14arw[2] = 14; // bit per pixel
+dataSony14arw[3] = 2048; // bias
+dataSony14arw[4] = "rggb"; // Bayer pattern
+dataSony14arw[5] = 5;  // Overscan area column start
+dataSony14arw[6] = 10; // Overscan area row start
+dataSony14arw[7] = 32; // Overscan area column width
+
+debayerRGGB       =  newArray(12); // Bayer matris RG1/G2B, the most common
+debayerRGGB[0]   = "Red"; // debayer postion Red pixels
+debayerRGGB[1]   = 0;
+debayerRGGB[2]   = 0;
+debayerRGGB[3]   = "Green1"; // debayer postion Green1 pixels
+debayerRGGB[4]   = -1;
+debayerRGGB[5]   = 0;
+debayerRGGB[6]   = "Green2"; // debayer postion Green1 pixels
+debayerRGGB[7]   = 0;
+debayerRGGB[8]   = -1;
+debayerRGGB[9]   = "Blue"; // debayer postion Blue pixels
+debayerRGGB[10] = -1;
+debayerRGGB[11] = -1;
+
+debayerPattern =  newArray(12); // Set of Bayer matris
 
 // Default gains, Canon 6D standard
-gainRed   = 1.5; // red gain=1.5 normal for Canon sensors, change this to your cameras red gain rel green
-gainGreen = 1.0; // gain for green channel is always set to 1
-gainBlue  = 1.7; // blue gain=1.7 normal for Canon sensors, change this to your cameras blue gain rel green
+gainRed    = 1.5; // red gain=1.5 normal for Canon sensors, change this to your cameras red gain rel green
+gainGreen  = 1.0; // gain for green channel is always set to 1
+gainBlue   = 1.7; // blue gain=1.7 normal for Canon sensors, change this to your cameras blue gain rel green
 
 // HDR gain, use this when doing HDR images example ISO1600/ISO400=4
 hdrGain=1;
 
+totGain = newArray(3);
+totGain[0] = 1; // the default Red    total gain
+totGain[1] = 1; // the default Green total gain
+totGain[2] = 1; // the default Blue    total gain
+
+masterFlatIDVector = newArray(4);
+masterFlatIDVector[0] = 0 ; // image file index default
+masterFlatIDVector[1] = 0 ;
+masterFlatIDVector[2] = 0 ;
+masterFlatIDVector[3] = 0 ;
+
 // Do a master flat calibration
-flatcalibrate = true;
+flatCalibrate = 1;
 
 // Input file name order
 // Time is to prefer if there is a small drift because of bad polar align or a comet that moves relative stars.
@@ -97,13 +184,16 @@ filenameorder[1] = "color"; // Color: Red_1001, Red_1002, Red_1003 ...... Gren1_
 
 // File number serie, offset second batch if you want to merge them later
 // offset: 1000, 2000, 3000 ...
-offset = newArray(6);
-offset[0] = 1000; // the default number
-offset[1] = 2000; //
-offset[2] = 3000; //
-offset[3] = 4000; //
-offset[4] = 5000; //
-offset[5] = 6000; //
+offset = newArray(9);
+offset[0] = "1000"; // the default number
+offset[1] = "2000"; //
+offset[2] = "3000"; //
+offset[3] = "4000"; //
+offset[4] = "5000"; //
+offset[5] = "6000"; //
+offset[6] = "7000"; //
+offset[7] = "8000"; //
+offset[8] = "9000"; //
 
 // Which colors to keep when demosaic ?
 mosaicColor = newArray(4);
@@ -112,22 +202,23 @@ mosaicColor[1] = 1; // Green1
 mosaicColor[2] = 1; // Green2
 mosaicColor[3] = 1; // Blue
 
-
 // if enabled extra data add to the end of filename
 // set cameradata = 0 (false) or cameradata = 1 (true)
 cameradata= 0 ;
 equipment="20200101 etc"; // Extra info in file name
 
-// Input box with parameters
+// ********** Input box with parameters
 
 Dialog.create("Setup batch reading process");
 
 Dialog.addMessage("No need of bias and dark cal, read overscan data of the sensor.");
 Dialog.addMessage("Batch reading raw files, flat calibrate, demosaic");
 Dialog.addMessage("BATCH RAW READING DATA AND SAVE AS CFA 16-bit TIFF STARTS HERE:");
-Dialog.addChoice("     Input files format:",fileformat,fileformat[1]); // Default = Canon cr2 raw files
+Dialog.addChoice("     Input files format:",fileformat,fileformat[3]); // Default = Canon 14-bit cr2 raw files
 
 Dialog.addMessage("When file format is Tiff it suppose to be CFA images, jumps direct to demosaicing");
+
+Dialog.addCheckbox("Read overscan area",overScan);
 
 Dialog.addMessage("File name order:");
 Dialog.addChoice("Time or Color order : ",filenameorder,filenameorder[0]);
@@ -143,10 +234,10 @@ Dialog.addString("Date, Object etc : ", equipment);
 
 Dialog.addMessage("DEMOSAICING STARTS HERE:");
 Dialog.addMessage("Which colors to keep ?");
-Dialog.addCheckbox("   Red : ", mosaicColor[0]);
-Dialog.addCheckbox("Green1 : ", mosaicColor[1]);
-Dialog.addCheckbox("Green2 : ", mosaicColor[2]);
-Dialog.addCheckbox("  Blue : ", mosaicColor[3]);
+Dialog.addCheckbox("Red",    mosaicColor[0]);
+Dialog.addCheckbox("Green1", mosaicColor[1]);
+Dialog.addCheckbox("Green2", mosaicColor[2]);
+Dialog.addCheckbox("Blue",   mosaicColor[3]);
 
 Dialog.addMessage("FLAT CALIBRATE, SAVE AS 32-bit TIFF STARTS HERE:");
 
@@ -159,44 +250,72 @@ Dialog.addMessage("HDR gain, ex ISO1600 / ISO400 = 4 :");
 Dialog.addNumber("          HDR gain : ",hdrGain);
 
 Dialog.addMessage("Flat calibrate ?");
-Dialog.addCheckbox("    _flat calibrate",flatcalibrate);
+Dialog.addCheckbox("    _flat calibrate",flatCalibrate);
 
 Dialog.show();
 
-// Save input from inputbox
+// ********** Save parameters from inputbox **********
 
-filetype = Dialog.getChoice();
-print("Filetype = ",filetype);
+fileData = Dialog.getChoice();
+if         (fileData == fileformat[0]) {
+	dataCameraRaw = Array.copy(dataTIFF1216bitRGGB); } // TIFF from earlier run of process
+else if (fileData == fileformat[1]) { 
+	dataCameraRaw = Array.copy(dataTIFF1416bitRGGB); } // TIFF from earlier run of process
+else if (fileData == fileformat[2]) { 
+	dataCameraRaw = Array.copy(dataCanon12cr2); } // Canon camera12-bit data .cr2 file
+else if (fileData == fileformat[3]) {
+	dataCameraRaw = Array.copy(dataCanon14cr2); } // Canon camera14-bit data .cr2 file
+else if (fileData == fileformat[4]) {
+	dataCameraRaw = Array.copy(dataNikon14nef); } // Nikon camera14-bit data .nef file
+else if (fileData == fileformat[5]) {
+	dataCameraRaw = Array.copy(dataSony14arw); } // Sony camera14-bit data .arw file
+
+Array.print(dataCameraRaw);
+
+if         (dataCameraRaw[4] == "rggb") {
+	debayerPattern = Array.copy(debayerRGGB); } // Set Bayer pattern to RG1/G2B
+
+Array.print(debayerPattern);
+
+filetype = dataCameraRaw[1];
+print("File Type = ", filetype);
+
+overScan = Dialog.getCheckbox();
+print("Overscan area = ", overScan);
 
 order = Dialog.getChoice();
 print("File name order = ", order);
 
-offsetString = Dialog.getChoice();
-if (offsetString == "1000.0") {
+offsetString = Dialog.getChoice(); // string to numeric
+if (offsetString == "1000") {
 	offset = 1000 ; }
-else if (offsetString == "2000.0") {
+else if (offsetString == "2000") {
 	offset = 2000 ; }
-else if (offsetString == "3000.0") {
+else if (offsetString == "3000") {
 	offset = 3000 ; }
-else if (offsetString == "4000.0") {
+else if (offsetString == "4000") {
 	offset = 4000 ; }
-else if (offsetString == "5000.0") {
+else if (offsetString == "5000") {
 	offset = 5000 ; }
-else if (offsetString == "6000.0") {
+else if (offsetString == "6000") {
 	offset = 6000 ; }
 print("Offset = ", offset);
-
 
 cameradata = Dialog.getCheckbox();
 print("Extra file info ? ", cameradata);
 
-equipment      = Dialog.getString();
+equipment = Dialog.getString();
+if (cameradata) { 
+	equipment = "_" + equipment;}
+else {
+	equipment = "";}
 print("Extra file info = ", equipment);
-
-if (!cameradata) {
-	equipment = "";
-}
-print("Extra file info = ", equipment);
+	
+if (overScan) {
+	overScanInfo = "_overScan";}
+else {
+	overScanInfo = "";}
+print("Extra file overScan info = ", overScanInfo);
 
 mosaicColor[0] = Dialog.getCheckbox();
 print("Keep Red : ", mosaicColor[0]);
@@ -210,307 +329,398 @@ print("Keep Green2 : ", mosaicColor[2]);
 mosaicColor[3] = Dialog.getCheckbox();
 print("Keep Blue : ", mosaicColor[3]);
 
-redGain = Dialog.getNumber();
-print("Gain Red = ", redGain);
+redGain   = Dialog.getNumber();
 greenGain = Dialog.getNumber();
-print("Gain Green = ", greenGain);
-blueGain = Dialog.getNumber();
-print("Gain Blue = ", blueGain);
+blueGain  = Dialog.getNumber();
 
 hdrGain = Dialog.getNumber();
-print("HDR gain = ", hdrGain);
 
-redHdrGain=redGain*hdrGain;
-print("Red HDR gain = ", redHdrGain);
-greenHdrGain=greenGain*hdrGain;
-print("Green HDR gain = ", greenHdrGain);
-blueHdrGain=blueGain*hdrGain;
-print("Blue HDR gain = ", blueHdrGain);
+totGain[0]=redGain*hdrGain;
+print("Red total gain = ", totGain[0]);
+totGain[1]=greenGain*hdrGain;
+print("Green total gain = ", totGain[1]);
+totGain[2]=blueGain*hdrGain;
+print("Blue total gain = ", totGain[2]);
 
-flatcal      = Dialog.getCheckbox();
-print("Flat calibrate = ", flatcal);
+flatCalibrate = Dialog.getCheckbox();
+print("Flat calibrate = ", flatCalibrate);
+if (flatCalibrate) { 
+	flatInfo = "";}
+else {
+	flatInfo = "_noFlat";}
+print("Extra file flatcal info = ", overScanInfo);
 
-// ********************* first part: reading raw files and convert to tiff *******************************
+// ********** Set to true and it will be fast, set to false and you can see the process in work **********
+
+setBatchMode(false); // set to false when debugging
+
+print(" ");
+print("********** Part 1: Set raw directory and master flats directory too if selected **********");
+print(" ");
 
 //Get File Directory with raw object images
 
+	if (filetype == ".tif") {
+		print(" ");
+		print("Use CFA 16-bit TIFF files direct from earlier process !");
+		call("ij.io.OpenDialog.setDefaultDirectory", rawImagesDirectory);  // Set default Raw files directory
+		dirSourch = getDirectory("Select main Directory where the directory with name CFA is");
+		print(" ");
+		print("Main CFA map directory set - Completed ");
+	}
+	else {
+		print("Use camera DSLR raw files");
+		call("ij.io.OpenDialog.setDefaultDirectory", rawImagesDirectory);  // Set default Raw files directory
+		dirSourch = getDirectory("Select main Directory where the raw directory is");
+		print(" ");
+		print("Main RAW map directory set - Completed ",dirSourch);
+	}
+
+	if (flatCalibrate) {
+		if (mosaicColor[0]) {
+			masterFlatRed    = File.openDialog("Select MasterFlat Red file");
+			}
+		if (mosaicColor[1]) {
+			masterFlatGreen1 = File.openDialog("Select MasterFlat Green1 file");
+			}
+		if (mosaicColor[2]) {
+			masterFlatGreen2 = File.openDialog("Select MasterFlat Green2 file");
+			}
+		if (mosaicColor[3]) {
+			masterFlatBlue   = File.openDialog("Select MasterFlat Blue file");
+			}
+		
+		print(" ");
+		print("Open selected Master flats - Completed ");
+	}
+	else {
+		print(" ");
+		print("Flat calibration disabled !");
+	}
+
 print(" ");
-print("*************************************");
+print("********** Part 2: Creates sub directories **********");
+print("Note: You must have all your raw files you want to process in a directory with the name 'raw' ");
 print(" ");
-print("Part one: Convert raw files to CFA 16-bit TIFF format");
-print(" ");
 
-call("ij.io.OpenDialog.setDefaultDirectory", rawImagesDirectory);  // Set default Raw files directory
-
-dirSourch = getDirectory("Select Input object raw files Directory");
-print(" ");
-print("Reading files from: " + dirSourch);
-fileList = getFileList(dirSourch);
-
-// **************** work to be done on image, part 1 *****************************
-work1 = "Batch read Canon CR2 raw files with overscan area and convert to CFA tiff bit and save";
-
-print(" ");
-print(work1 + " - Starting");
-print("Reading raw files from : " + dirSourch);
-
-// ************************ Creates sub directories ******************************
-
-dirDestCfa = dirSourch + "cfa" + File.separator; // cfa directory, this one can be deleted later
-File.makeDirectory(dirDestCfa);
-print("Create output cfa directory: " + dirDestCfa);
-
-dirDestRaw = dirSourch + "raw" + File.separator; // raw directory, place your raw files here later
-File.makeDirectory(dirDestRaw);
-print("Create output raw directory: " + dirDestRaw);
-
-dirDestAlign = dirSourch + "align" + File.separator; // align directory, place your align files here
-File.makeDirectory(dirDestAlign);
-print("Create output align directory: " + dirDestAlign);
-
-dirDestStack = dirSourch + "stack" + File.separator; // stack directory, place your stacked files here
-File.makeDirectory(dirDestStack);
-print("Create output stack directory: " + dirDestStack);
-
-// set to true and it will be fast, set to false and you can see the process in work
-setBatchMode(true);
-
-// ********************* open library of rggb masterflat files *********************
-
-call("ij.io.OpenDialog.setDefaultDirectory", masterFlatDirectory);  // Set default MasterFlat directory
-
-if (flatcal) {
-	masterFlatRed    = File.openDialog("Select MasterFlat Red file");
-	masterFlatGreen1 = File.openDialog("Select MasterFlat Green1 file");
-	masterFlatGreen2 = File.openDialog("Select MasterFlat Green2 file");
-	masterFlatBlue   = File.openDialog("Select MasterFlat Blue file");
-}
-else {
+	dirDestRaw = dirSourch + "raw" + File.separator; // RAW directory, place your raw files here later
+	if (File.exists(dirDestRaw)) {
+		print("Directory raw already exist: " + dirDestRaw);
+		} 
+	else {
+		File.makeDirectory(dirDestRaw);
+		print("New directory raw created: " + dirDestRaw);
+		print("Please, stop (Esc) the process and move your raw files to this raw directory");
+	}
+	
 	print(" ");
-	print("Flat calibration disabled !");
-}
 
-fileNumber = 0; // all files in directory
-extno=0; // number of files with correct file extension
-
-while (fileNumber < fileList.length) {
-	id = fileList[fileNumber++];
-	extend=lengthOf(id);
-	dotIndex = indexOf(id, ".");
-
-	if (dotIndex >= 0) {
-		ext = substring(id, extend-4, extend);
-		extno=extno+1;
-	}
+	dirDestCfa = dirSourch + "cfa" + File.separator; // CFA directory
+	if (File.exists(dirDestCfa)) {
+		print("Directory cfa already exist: " + dirDestCfa);
+	} 
 	else {
-		ext = "subdirectory";
+		File.makeDirectory(dirDestCfa);
+		print("New directory cfa created: " + dirDestCfa);
 	}
+	
+	print(" ");
 
-// process only correct files, if not Canon change to other file extension above, Note: for the moment only Canon works
-	if (ext==filetype) {
-
-	readRawFiles(dirSourch,id);
-	saveAs("Tiff", dirDestCfa + "cfa_" + toString(offset*2 + extno));
-	close();
-
-		print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + id + " saved as: " + "cfa_" + toString(offset+extno) +".tif");
-	}
-	else
-		print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + id + " excluded");
-	}
-
-print("Löpnummer = ", offset,extno,offset+extno);
-
-print(work1 + " - Completed");
-
-// END first part, open raw and store as CFA TIFF 16-bit
-
-
-// ********************* second part: converting cfa tiff to demosaic rggb calibrated object files ***************************
-
-print(" ");
-print("*************************************");
-print(" ");
-print("Part two: Open demosaiced RG1G2B files and flatcalibrate, normalize, clean for bad data");
-print(" ");
-
-work2 = "Convert virtual stack of cfa images to demosaiced rggb, calibrate dark, bias and flat, save as 32 bit tiff";
-print(" ");
-print(work2 + " - Starting");
-print("open cfa files as virtual stack");
-
-//Get File output directory
-rotObject = dirSourch; // use the same directory as sourch
-
-dirDestrggb = dirSourch + "object_rggb" + File.separator;
-File.makeDirectory(dirDestrggb);
-print("create output rggb object dir: " + dirDestrggb);
-
-if (flatcal) {
-
-open(masterFlatRed);
-masterFlatRedTitle = getTitle();
-print("MasterFlat Red: " + masterFlatRedTitle + " is open");
-
-open(masterFlatGreen1);
-masterFlatGreen1Title = getTitle();
-print("MasterFlat Green1: " + masterFlatGreen1Title + " is open");
-
-open(masterFlatGreen2);
-masterFlatGreen2Title = getTitle();
-print("MasterFlat Green2: " + masterFlatGreen2Title + " is open");
-
-open(masterFlatBlue);
-masterFlatBlueTitle = getTitle();
-print("MasterFlat Blue: " + masterFlatBlueTitle + " is open");
-
-}
-
-
-
-// open earlier saved tiff files as a virtual stack
-run("Image Sequence...", "open=[" + dirDestCfa + "] number=extno starting=1 increment=1 scale=100 file=[] or=[] sort use");
-idSrc = getImageID();
-n = nSlices();
-print("open cfa as virtual stack");
-print(" ");
-
-for (i=1; i<=n; i++) {
-	selectImage(idSrc);
-	setSlice(i);
-	run("Duplicate...", "title=NoStack");
-	oneimage = getImageID();
-
-//	debayer order rg1g2b // Red Green1 Green2 Blue
-
-//      Red channel
-
-	selectImage(oneimage);
-	makeColorChannel("Red", 0, 0);
-	removeBiasDark(dirDestrggb,"Red_",equipment);
-
-	if (flatcal) {
-	imageCalculator("Divide 32-bit","deMosaic",masterFlatRedTitle); // flat calibration
-	}
-
-	run("Multiply...", "value=redHdrGain");
-
-	if (order == "time") {
-		saveAs("Tiff", dirDestrggb + toString(offset+i) + "_Red" + equipment);
-	}
+	dirDestrggb = dirSourch + "demosaiced_rggb" + File.separator; // Demosaiced_RGGB directory
+	if (File.exists(dirDestrggb)) {
+		print("Directory demosaiced_rggb already exist: " + dirDestrggb);
+	} 
 	else {
-		saveAs("Tiff", dirDestrggb + "Red_" + toString(offset+i) + equipment);
+		File.makeDirectory(dirDestrggb);
+		print("New directory demosaiced_rggb created: " + dirDestrggb);
 	}
-	object = getImageID();
-	selectImage(object); close();
-	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
-	print(toString(i) + "/" + toString(n) + ": " + toString(offset+i) +" Red objectfile finished");
-
-//      Green1 channel
-
-	selectImage(oneimage); 
-	makeColorChannel("Green1", -1, 0);
-	removeBiasDark(dirDestrggb,"Green1_",equipment);
-
-	if (flatcal) {
-	imageCalculator("Divide 32-bit","deMosaic",masterFlatGreen1Title); // flat calibration
-	}
-
-	run("Multiply...", "value=greenHdrGain");
-
-	if (order == "time") {
-		saveAs("Tiff", dirDestrggb + toString(offset+i) + "_Green1" + equipment);
-	}
+	
+	print(" ");
+	
+	dirDestAligne = dirSourch + "aligne" + File.separator; // Aligne directory
+	if (File.exists(dirDestAligne)) {
+		print("Directory aligne already exist: " + dirDestAligne);
+	} 
 	else {
-		saveAs("Tiff", dirDestrggb + "Green1_" + toString(offset+i) + equipment);
+		File.makeDirectory(dirDestAligne);
+		print("New directory aligne created: " + dirDestAligne);
+		print("Place your aligned files here");
 	}
-	object = getImageID();
-	selectImage(object); close();
-	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
-	print(toString(i) + "/" + toString(n) + ": " + toString(offset+i) +" Green1 objectfile finished");
-
-//      Green2 channel
-
-	selectImage(oneimage);
-	makeColorChannel("Green2", 0, -1);
-	removeBiasDark(dirDestrggb,"Green2_",equipment);
-
-	if (flatcal) {
-	imageCalculator("Divide 32-bit","deMosaic",masterFlatGreen2Title); // flat calibration
-	}
-
-	run("Multiply...", "value=greenHdrGain");
-
-	if (order == "time") {
-		saveAs("Tiff", dirDestrggb + toString(offset+i) + "_Green2" + equipment);
-	}
+	
+	print(" ");
+		
+	dirDestStack = dirSourch + "stack" + File.separator; // Stack directory
+	if (File.exists(dirDestStack)) {
+		print("Directory stack already exist: " + dirDestStack);
+		print("Place your stacked images here");
+	} 
 	else {
-		saveAs("Tiff", dirDestrggb + "Green2_" + toString(offset+i) + equipment);
-	}
-	object = getImageID();
-	selectImage(object); close();
-	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
-	print(toString(i) + "/" + toString(n) + ": " + toString(offset+i) +" Green2 objectfile finished");
-
-//      Blue channel
-
-	selectImage(oneimage);
-	makeColorChannel("Blue", -1, -1);
-	removeBiasDark(dirDestrggb,"Blue_",equipment);
-
-	if (flatcal) {
-	imageCalculator("Divide 32-bit","deMosaic",masterFlatBlueTitle); // flat calibration
+		File.makeDirectory(dirDestStack);
+		print("New directory stack created: " + dirDestStack);
+		print("Please, place your stacked images here");
 	}
 
-	run("Multiply...", "value=blueHdrGain");
+	print(" ");
+	print("New directories created - Completed ");
+	print(" ");
+	
+print("********** Part 3: Reading RAW files and convert to CFA and save as 16-bit TIFF **********");
+print("Reading RAW file type = " + filetype);
+print("Read Over Scan area = " + overScan);
 
-	if (order == "time") {
-		saveAs("Tiff", dirDestrggb + toString(offset+i) + "_Blue" + equipment);
-	}
+	if (filetype == ".tif") {
+		print("RAW to CFA TIFF conversation already done, skip reading RAW files");
+		}
 	else {
-		saveAs("Tiff", dirDestrggb + "Blue_" + toString(offset+i) + equipment);
+		print(" ");
+		print("Reading RAW files from: " + dirDestRaw);
+
+		fileList = getFileList(dirDestRaw);
+		
+		fileNumber = 0; // all files in directory, start from 0
+		extno=0; // number of files with correct file extension, increment for each correct file found
+
+		while (fileNumber < fileList.length) {
+			fileid = fileList[fileNumber++];
+			extend=lengthOf(fileid);
+			dotIndex = indexOf(fileid, ".");
+
+			if (dotIndex >= 0) {
+				ext = substring(fileid, extend-4, extend);
+				extno=extno+1;
+			}
+			else {
+				ext = "not a file, subdirectory";
+			}
+
+	// process all correct files extension
+	// Note: for the moment only tested on Canon .cr2 350D, 5D and 6D
+
+		if (ext==filetype) { // only correct file extension processed
+
+			convertRaw2CFA_Files(dirDestRaw, fileid, overScan); // Calling function
+
+			saveAs("Tiff", dirDestCfa + "cfa_" + toString(offset + extno) + overScanInfo + equipment);
+
+			close(); // Close all open files to save memory
+
+			print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + fileid + " saved as: " + "cfa_" + toString(offset+extno) + overScanInfo + flatInfo + equipment +".tif");
+
+		}
+		else
+			print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + fileid + " excluded");
+		}
+
+		print(" ");
+		print("RAW to CFA - Completed");
+		print(" ");
 	}
-	object = getImageID();
-	selectImage(object); close();
-	if (isOpen("deMosaic")) {selectImage("deMosaic"); close(); }
-	print(toString(i) + "/" + toString(n) + ": " + toString(offset+i) +" Blue objectfile finished");
-	if (isOpen(oneimage)) {selectImage(oneimage); close(); }
-}
 
-if (flatcal) {
-	if (isOpen(masterFlatRedTitle)) {selectImage(masterFlatRedTitle); close(); }
-	if (isOpen(masterFlatGreen1Title)) {selectImage(masterFlatGreen1Title); close(); }
-	if (isOpen(masterFlatGreen2Title)) {selectImage(masterFlatGreen2Title); close(); }
-	if (isOpen(masterFlatBlueTitle)) {selectImage(masterFlatBlueTitle); close(); }
-}
+print("********** Part 4: Converting CFA TIFF to demosaic RGGB calibrated object files and saved as 32-bit TIFF **********");
+print("sourche directory CFA = ", dirDestCfa);
+print("Flat Calibration = " + flatCalibrate);
 
-if (isOpen(idSrc)) {selectImage(idSrc); close(); }
-// if (isOpen("cfa")) {selectImage("cfa"); close(); }
+	if (mosaicColor[0] || mosaicColor[1] || mosaicColor[2] || mosaicColor[3]) { // only if there is at least one color channel to demosaic
 
-setBatchMode(false);
+		if (filetype == ".tif") {
+			print(" ");
+			print("Get directory to 16-bit CFA TIFF files from earlier process", dirDestCfa);
+			print(" ");
+			}
+		else {		
+			print(" ");
+			print("Get directory to the CFA files = ", dirDestCfa);
+			}
+	
+		if (flatCalibrate) {
+			call("ij.io.OpenDialog.setDefaultDirectory", masterFlatDirectory);  // Set default MasterFlat directory
+		
+			if (mosaicColor[0]) {
+				open(masterFlatRed);
+				masterFlatIDVector[0] = getImageID();
+				print("MasterFlat Red ID: " + masterFlatIDVector[0] + " is open");
+				}
+			if (mosaicColor[1]) {
+				open(masterFlatGreen1);
+				masterFlatIDVector[1] = getImageID();
+				print("MasterFlat Green1 ID: " + masterFlatIDVector[1] + " is open");
+				}
+			if (mosaicColor[2]) {
+				open(masterFlatGreen2);
+				masterFlatIDVector[2] = getImageID();
+				print("MasterFlat Green2 ID: " + masterFlatIDVector[2] + " is open");
+				}
+			if (mosaicColor[3]) {
+				open(masterFlatBlue);
+				masterFlatIDVector[3] = getImageID();
+				print("MasterFlat Blue ID: " + masterFlatIDVector[3] + " is open");
+				}
+		
+			print("MasterFlat enable / disable RGGB after = ");		
+			Array.print(masterFlatIDVector);
+			}
+		else {
+			print(" ");
+			print("Flat calibration disabled !");
+			print(" ");
+			}
+	
+		// Open earlier saved CFA 16-bit TIFF files as a virtual stack
+	
+		fileList = getFileList(dirDestCfa);
+		numberOfFiles = fileList.length;
+		print("Number of files to open = ", numberOfFiles);
+	
+		run("Image Sequence...", "open=[" + dirDestCfa + "] number=numberOfFiles starting=1 increment=1 scale=100 file=[] or=[] sort use"); // old call
+		idCFA = getImageID();
+		print("CFA is open as virtual stack, ID = ", idCFA);
+	
+		n = nSlices();
+		print("Number of slices to process = ", n);
+		print(" ");
 
-print(" ");
-print(work2 + " - Completed");
-print("there is no need anymore of the cfa libary, you can erase it");
-print("rggb image files saved on: " + dirDestrggb);
+		for (i=1; i<=n; i++) {
+			selectImage(idCFA);
+			setSlice(i);
+			run("Duplicate...", "title=singleCFA");
+			oneCFAimage = getImageID();
 
-call("ij.io.OpenDialog.setDefaultDirectory", rawImagesDirectory); // set to default raw files directory
+			if (overScan) {
+				removeBiasDark(oneCFAimage, dataCameraRaw[5], dataCameraRaw[6], dataCameraRaw[7]); // Function bias = mean value of overscan region
+				}
+			else {
+				run("32-bit");
+				run("Subtract...", "value=dataCameraRaw[3]"); // Subtract Bias for standard camera
+				imageName = getTitle();
+				rename(imageName + "_bias_const");
+				}
 
-// END second part demosaic of CFA and flat calibrate and store as TIFF 32-bit
+			// Debayer parameter rg1g2b, Red Green1 Green2 Blue
+
+			for (color=1; color<=4; color++) {
+				Process = 0;
+				if (mosaicColor[0] && color == 1) {
+					colorChannel = debayerPattern[0]; // normally Red channel
+					dx = debayerPattern[1]; // x-shift to demosaic;
+					dy = debayerPattern[2]; // y-shift to demosaic;
+					HGain = totGain[0]; // Red * HDR gain factor
+					if (flatCalibrate) { masterFlat = masterFlatIDVector[0]; }
+					Process = 1;
+					}
+				else if (mosaicColor[1] && color == 2) {
+					colorChannel = debayerPattern[3]; // normally Green1 channel
+					dx = debayerPattern[4]; // x-shift to demosaic;
+					dy = debayerPattern[5]; // y-shift to demosaic;
+					HGain = totGain[1]; // Green1 * HDR gain factor
+					if (flatCalibrate) { masterFlat = masterFlatIDVector[1]; }
+					Process = 1;
+					}
+				else if (mosaicColor[2] && color == 3) {
+					colorChannel = debayerPattern[6]; // normally Green2 channel
+					dx = debayerPattern[7]; // x-shift to demosaic;
+					dy = debayerPattern[8]; // y-shift to demosaic;
+					HGain = totGain[1]; // Green2 * HDR gain factor
+					if (flatCalibrate) { masterFlat = masterFlatIDVector[2]; }
+					Process = 1;
+					}
+				else if (mosaicColor[3] && color == 4) {
+					colorChannel = debayerPattern[9]; // normally Blue channel
+					dx = debayerPattern[10]; // x-shift to demosaic;
+					dy = debayerPattern[11]; // y-shift to demosaic;
+					HGain = totGain[2]; // Blue HDR * gain factor
+					if (flatCalibrate) { masterFlat = masterFlatIDVector[3]; }
+					Process = 1;
+					}
+				
+				if (Process) {
+		
+					print("Bayer filter shift data = ", colorChannel, dx, dy, " HdrGain = ", HGain);
+
+					selectImage(oneCFAimage);
+					deMosaic_CFA(colorChannel, dx, dy); // Call function
+					
+					lastImage = getImageID();
+
+					if (flatCalibrate) {
+						imageCalculator("Divide 32-bit", lastImage, masterFlat); } // flat calibration if enabled
+				
+					run("Multiply...", "value=HGain");
+					imageName = getTitle();
+					rename(imageName + "_HdrGain");
+
+					if (order == "time") {
+						saveAs("Tiff", dirDestrggb + toString(offset+i) + "_" + colorChannel +  overScanInfo + flatInfo + equipment);
+						}
+					else {
+						saveAs("Tiff", dirDestrggb + colorChannel + "_" + toString(offset+i) + overScanInfo + flatInfo + equipment);
+						}
+		
+					lastImage = getImageID();
+					if (isOpen(lastImage)) {selectImage(lastImage); close(); }
+
+					print(toString(i) + "/" + toString(n) + ": " + toString(offset+i) +" " + colorChannel + overScanInfo + flatInfo + equipment +"_deMosaiced finished");
+					}
+				}
+	
+			if (isOpen(oneCFAimage)) {selectImage(oneCFAimage); close(); }
+		}
+		
+		if (isOpen(idCFA)) {selectImage(idCFA); close(); }
+		
+		if (flatCalibrate) {
+			if (mosaicColor[0]) { 
+				if (isOpen(masterFlatIDVector[0])) {
+					selectImage(masterFlatIDVector[0]); 
+					close(); 
+					}
+				}
+			if (mosaicColor[1]) { 
+				if (isOpen(masterFlatIDVector[1])) {
+					selectImage(masterFlatIDVector[1]); 
+					close();
+					}
+				}
+			if (mosaicColor[2]) {
+				if (isOpen(masterFlatIDVector[2])) {
+					selectImage(masterFlatIDVector[2]); close();
+					}
+				}
+			if (mosaicColor[3]) {
+				if (isOpen(masterFlatIDVector[3])) {
+					selectImage(masterFlatIDVector[3]);
+					close();
+					}
+				}
+			}
+		
+		print(" ");
+		print("Demosaiced CFA images saved as RGGB image at: " + dirDestrggb);
+		print("Part 4: - Completed");
+		}
+	else {
+		print(" ");
+		print("No color channel to demosaic");
+		print("Part 4: - Completed");
+		}
+	
+print(" ********** Part 1 to 4 completed, END **********");
 
 
 
-// ***************** functions **************************************************************
+// ********** Functions **********
 
+// ffffffffff Function read all correct raw files and convert to CFA and store as 16-bit CFA TIFF files ffffffffff
+
+function convertRaw2CFA_Files(dirSourch, fileid, overScan) {
 
 // This is the heart of reading raw DSLR files
 // I got it from http://ij-plugins.sourceforge.net/plugins/dcraw/
-// small modifications by me to handle batch reading
-// You must have it downloaded and installed
+// You must have DCRaw downloaded and installed
 // [] because of spaces in filename
-	function readRawFiles(dir,filename) {
+
+	if (overScan) {
 		run("DCRaw Reader...",
-		"open=[" + dir + filename + "] " +
+		"open=[" + dirSourch + fileid + "] " +
 		"use_temporary_directory " +
 		"white_balance=[None] " +
 		"do_not_automatically_brighten " +
@@ -523,27 +733,52 @@ call("ij.io.OpenDialog.setDefaultDirectory", rawImagesDirectory); // set to defa
 		"do_not_rotate " +
 //		"show_metadata" +
 		"");
+		}
+	else {	
+		run("DCRaw Reader...",
+		"open=[" + dirSourch + fileid + "] " +
+		"use_temporary_directory " +
+		"white_balance=[None] " +
+		"do_not_automatically_brighten " +
+		"output_colorspace=[raw] " +
+//		"document_mode " +  // black borders (overscan area) or not
+		"document_mode_without_scaling " +
+		"read_as=[16-bit linear] " +
+		"interpolation=[High-speed, low-quality bilinear] " +
+//		"half_size " +
+		"do_not_rotate " +
+//		"show_metadata" +
+		"");
+		}
 	}
 
-
-// function Reduce size and demosaic stack
-	function makeColorChannel(name, dx, dy) {
+// ffffffffff Function Reduce size and demosaic stack ffffffffff
+	function deMosaic_CFA(name, dx, dy) {
 		halfWidth = getWidth()/2;
 		halfHeight = getHeight()/2;
 		run("Duplicate...", "title=&name duplicate");
 		run("Translate...", "x=&dx y=&dy interpolation=None");
 		run("Size...", "width=&halfWidth height=&halfHeight depth=&n interpolation=None");
-		rename("deMosaic");
+		imageName = getTitle();
+		rename(imageName + "_deMosaic");
 	}
 
-
-// function removeBiasDark, this function only works for Canon EOS, tested on Canon 350D, 5D and 6D
-	function removeBiasDark(dirDest,filename,equipment) {
-	selectImage("deMosaic");
+// ffffffffff Function removeBiasDark, this function only works for Canon EOS, tested on Canon 350D, 5D and 6D ffffffffff
+	function removeBiasDark(fileid, col_start, row_start, col_width) {
+	selectImage(fileid);
 	run("32-bit");
-	getSelectionBounds(x, y, width, height) ;
-	makeRectangle(3, 20, 20, height-40); // black area (overscan area), works raws Canon EOS 350D, 5D, 6D
+	
+	width = getWidth(); // get image size
+	height = getHeight();
+	
+	//getSelectionBounds(x, y, frame_width, frame_height) ;
+	
+	makeRectangle(col_start, row_start, col_width, height - 2*row_start); // black area (overscan area), tested on Canon EOS 350D, 5D, 6D .cr2 files
 	getRawStatistics(pix,mean,min,max,std,hist);
+	
 	run("Select None");
 	run("Subtract...", "value=mean");
+	
+	imageName = getTitle();
+	rename(imageName + "_bias_avg");
 	}
