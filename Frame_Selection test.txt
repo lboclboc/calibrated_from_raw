@@ -1,0 +1,75 @@
+// Frame selection test for over scan region
+
+print(" ");
+print("Frame selection test for over scan region");
+print("Version 2020-02-10")
+print(" ");
+print("Auther Lars Karlsson");
+print("Check my homepage for more instructions and download of latest version");
+print("www.astrofriend.eu");
+print(" ");
+
+
+// This is a test to set the region of over scan area for a camera, it's different
+// From AstroImageJ Pluings menu, Input-Output, click on DCRaw Reader...
+// Open the RAW file that you want to analyze the over scan are on
+// Setup DCRaw to this
+// Enable "Use temporary directory for processing"
+// White balance = None
+// Output colorspace = raw
+// Enable "Document mode (no color, no interpolation)"
+// Enable "Document mode without scaling (totaly raw)"
+// Read as = 16-bit linear
+// Interpolation quality = High-speed, low-quality bilinear, this one should not matter
+// Disable "Half size"
+// Enable "Do not rotate or scale pixels (preserve orientation and aspect ratio)"
+// Enable "Show metadata in Result window
+//
+// Click on OK button
+//
+// Run this macro "Frame_Selection test.txt
+// Check the image, it should now have a rectangle drawed on top of the image
+// The over scan area are normally to the left and a small on the top too, the latter not used here
+// Zoom and increase the contrast of the image and you will see the border of the over scan region
+// The rectangle shall not reach into the image area, have at least a margin of 5 pixel
+// If you have many cameras, set the width to the most narrow width of your cameras but not less than 20 pixel wide
+// 
+// Below the most common setup of reactangle, test with different values and run this macro once again
+// You only run DCRaw Reader once for every camera image you want to test
+
+
+// Rectangle setup (to fit inside over scan region) row width calculated
+// Canon 350D col over scan width = 42 pix, Canon 5D = 90 pix, Canon 6D = 72 pix
+// Leave a margin of at least 5 pixels around
+
+col_start = 5;
+row_start = 10;
+col_width = 32;
+
+// The row_width will be calculated inside this macro
+
+
+print("Frame selection: ");
+print("Column start = ", col_start);
+print("Row start    = ", row_start);
+print("Column width = ", col_width);
+print(" ");
+
+fileid = getImageID();
+
+selectImage(fileid);
+
+	width = getWidth();
+	height = getHeight();
+
+	print("Max size: ");
+	print("Width = ", width);
+	print("Height = ", height);
+	
+	makeRectangle(col_start, row_start, col_width, height - 2*row_start); // black area (overscan area), tested on Canon EOS 350D, 5D, 6D .cr2 files
+	getRawStatistics(pix,mean,min,max,std,hist);
+
+	print(" ");
+	print("Over scan area mean value = ", mean);
+
+// Check the log window and you will see the file's meta data and the figures from above
