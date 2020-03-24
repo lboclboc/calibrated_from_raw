@@ -1,0 +1,205 @@
+// macro: Batch read raw lite version
+// 0pen DSLR raw files and convert to cfa Tiff 16 bit.txt
+
+// This macro read I believe all DLSR fies that DCRaw can handle, 
+// it convert raw files to cfa Tiff 16 bit files in a batch mode
+
+print("This macro read I believe all DLSR fies that DCRaw can handle,");
+print("it convert raw files to cfa Tiff 16 bit files in a batch mode");
+print("I have prepared for the most common DSLR formats raw files");
+print("Note: You must set the parameter filetype if they are not in the list");
+print("to your cameras raw files extension !");
+print("Use Notepad or simular tool to edit this file to that.");
+
+// macro by Lars Karlsson
+// to use with the software AstroImageJ for astrophoto editing
+// its main use is to read raw files from DSLR cameras
+
+// History:
+
+version = "Version 20200218";
+
+// Version 20200218
+// Added more raw formats
+//
+// version 20200212
+// Implemented a  menu system
+// Possibe to choose overscan area
+//
+// version 20170930 Beta
+// First release
+
+print(" ");
+print(version);
+
+print(" ");
+print("visit my homepage to get latest version:");
+print("http://astrofriend.eu/astronomy/tutorials/tutorial-astroimagej/tutorial-aij-03-my-own-macros.html");
+
+// there is also an instruction how to use this macro
+// use it by your own risk, have backup of your files!
+
+// Note this is a special version of the Canon read raw filse macro, 
+// it doesn't take advantage of any overscan area as Canon files have, just batch open the files
+// I don't use it myself, it's for you that don't have a Canon DSLR !
+
+
+getDateAndTime(year,month,dow,day,h,m,s,msec);
+t = "Process started: "+year+"-"+month+"-"+day+"Time: "+h+":"+m+":"+s;
+print("\n-------------------- "+t+" --------------------");
+print(" ");
+print("Start batch reading process");
+
+// ********** Setup input numbers and file directories all global variables **********
+
+print ("Setup default input numbers and file directories:");
+
+// Input file format
+// Note: Only tested with Canon EOS 350D, 5D and 6D
+
+// ********** camera and file data ***********
+
+fileformatDef = newArray(9);
+	fileformatDef[0] = ".cr2"; // Canon     RAW tested on 350D, 5D, 6D works with overscan
+	fileformatDef[1] = ".cr3"; // Canon     RAW not tested
+	fileformatDef[2] = ".nef"; // Nikon     RAW tested on some, no overscan
+	fileformatDef[3] = ".arw"; // Sony      RAW tested on some, no overscan
+	fileformatDef[4] = ".pef"; // Pentax    RAW not tested
+	fileformatDef[5] = ".rw2"; // Panasonic RAW not tested
+	fileformatDef[6] = ".orf"; // Olympus   RAW not tested
+	fileformatDef[7] = ".raf"; // Fuji      RAW not tested
+	fileformatDef[8] = ".dng"; // Adobe     RAW open standard, not tested
+
+
+
+overScanDef = 0; // With or without overscan region
+
+// ffffffffff Input RAW files menu ffffffffff
+
+Dialog.create(" Batch read raw lite version");
+Dialog.addMessage("Batch reading raw files, store as TIFF files");
+
+Dialog.addChoice("     Input files format :", fileformatDef, fileformatDef[0]); // Default = Canon 14-bit cr2 raw files
+
+Dialog.addCheckbox("Read overscan area (Canon)", overScanDef);
+
+Dialog.addMessage("The converted Tiff CFA files will be saved in a sub directory with name cfa");
+
+Dialog.addMessage("Note: To open the latest camera's raw files you must have the eatest version of DCRaw intalled");
+
+Dialog.addMessage(version);
+
+Dialog.show();
+
+// ********** Save parameters from inputbox **********
+
+filetype = Dialog.getChoice();
+print("File format to read = ", filetype);
+
+overScan = Dialog.getCheckbox();
+print("Overscan area = ", overScan);
+if (overScan) {
+	overScanInfo = "_overScan";}
+else {
+	overScanInfo = "";}
+print("Extra file overScan info = ", overScanInfo);
+
+// ********************* first part: reading raw files and convert to tiff and save *******************************
+
+// Open directory where the RAW files are stored
+dirSourch = getDirectory("Open raw files directory");
+fileList = getFileList(dirSourch);
+
+// work to be done on image, part 1
+work1 = "Open DSLR raw files and convert to cfa tiff 16 bit";
+
+print(" ");
+print(work1 + " - Starting");
+print("Reading raw files from : " + dirSourch);
+
+dirDestCfa = dirSourch + "cfa" + File.separator;
+File.makeDirectory(dirDestCfa);
+print("Create output cfa directory: " + dirDestCfa);
+
+print(" ");
+
+// set to true and it will be fast, set to false and you can see the process in work but very slow
+setBatchMode(true);
+
+fileNumber = 0; // all files in directory
+extno=0; // number of files with correct file extension
+
+while (fileNumber < fileList.length) {
+	id = fileList[fileNumber++];
+	extend=lengthOf(id);
+	dotIndex = indexOf(id, ".");
+
+	if (dotIndex >= 0) {
+		ext = substring(id, extend-4, extend);
+		extno=extno+1;
+	}
+	else {
+		ext = "subdirectory";
+	}
+
+// process only correct files, if not Canon change to other file extension above
+	if (ext==filetype) {
+
+	readRawFiles(dirSourch,id,overScan);
+
+	saveAs("Tiff", dirDestCfa + "cfa_" + toString(1000+extno) + overScanInfo);
+	close();
+
+		print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + id + " saved as: " + "cfa_" + toString(1000+extno) + overScanInfo +".tif");
+	}
+	else
+		print(toString(fileNumber) + "/" + toString(fileList.length) + ": " + id + " excluded not correct extension or a directory");
+	}
+
+print(" ");
+print(work1 + " - Completed");
+
+// END first part
+
+// ***************** functions **************************************************************
+
+// ffffffffff Function read RAW files ffffffffff
+
+// This is the heart of reading raw DSLR files
+// I got it from http://ij-plugins.sourceforge.net/plugins/dcraw/
+// You must have DCRaw downloaded and installed
+// [] because of spaces in filename
+
+	function readRawFiles(dirSourch, fileid, overScan) {
+		if (overScan) {
+			run("DCRaw Reader...",
+			"open=[" + dirSourch + fileid + "] " +
+			"use_temporary_directory " +
+			"white_balance=[None] " +
+			"do_not_automatically_brighten " +
+			"output_colorspace=[raw] " +
+			"document_mode " +  // black borders (overscan area) or not
+			"document_mode_without_scaling " +
+			"read_as=[16-bit linear] " +
+			"interpolation=[High-speed, low-quality bilinear] " +
+//			"half_size " +
+			"do_not_rotate " +
+//			"show_metadata" +
+			"");
+		} else {	
+			run("DCRaw Reader...",
+			"open=[" + dirSourch + fileid + "] " +
+			"use_temporary_directory " +
+			"white_balance=[None] " +
+			"do_not_automatically_brighten " +
+			"output_colorspace=[raw] " +
+//			"document_mode " +  // black borders (overscan area) or not
+			"document_mode_without_scaling " +
+			"read_as=[16-bit linear] " +
+			"interpolation=[High-speed, low-quality bilinear] " +
+//			"half_size " +
+			"do_not_rotate " +
+//			"show_metadata" +
+			"");
+		}
+	}

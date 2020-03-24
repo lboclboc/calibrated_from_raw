@@ -1,0 +1,274 @@
+// ffffffffff Function ind flat calibration points from RAW file ffffffffff
+
+// History:
+versionSoftware="Version: 20200324" // latest version
+print(versionSoftware); // latest
+
+// Setup
+
+DefRawTiff = true; // raw is default
+
+DefOverScan = true; // read overscan region of sensor
+
+DefBias=newArray(5);
+	DefBias[0]=0;
+	DefBias[1]=128;
+	DefBias[2]=256;
+	DefBias[3]=1024;
+	DefBias[4]=2048;
+
+DefDecolor=newArray(2);
+	DefDecolor[0]="deBayer";
+	DefDecolor[1]="deMosaic";
+
+DefNorm = true; // normalize flat frame
+
+DefFitFunction = newArray(4);
+	DefFitFunction[0]="2nd Degree Polynomial";
+	DefFitFunction[1]="4th Degree Polynomial";
+	DefFitFunction[2]="6th Degree Polynomial";
+	DefFitFunction[3]="8th Degree Polynomial";
+
+// ********** Dialog input **********
+
+Dialog.create("Find flat cal test points");
+
+Dialog.addMessage("Read a Raw or Tiff file ?");
+Dialog.addCheckbox("Raw file", DefRawTiff); // Default raw file
+
+Dialog.addMessage("Read raw file with overscan ?");
+Dialog.addCheckbox("Over scan", DefOverScan);
+
+Dialog.addChoice("     Bias to subtract :", DefBias, DefBias[4]); // Bias to subtract 128 = 12 bit, 2048 = 14 bit Canon, Default 2048
+
+Dialog.addChoice("     DeBeyer or Demosaic :", DefDecolor, DefDecolor[1]); // Default = Demosaic, take green1 channel
+
+Dialog.addMessage("Normalize Flat frame ?");
+Dialog.addCheckbox("Normalize", DefNorm);
+
+Dialog.addChoice("     Degree of fit polynom :", DefFitFunction, DefFitFunction[2]); // Default = 8th degree polynomial
+
+Dialog.addMessage("");
+Dialog.addMessage("Note: This is a Beta version with lot of bugs !");
+Dialog.addMessage(versionSoftware);
+
+Dialog.show();
+
+// ********** Save parameters from inputbox **********
+
+RawTiff = Dialog.getCheckbox(); // Raw file default
+print("Raw file = ",RawTiff);
+
+overScan = Dialog.getCheckbox(); // Calibration type Bias to do
+if (overScan) {
+	overScanInfo="os";
+} else {
+	overScanInfo = "";
+}
+print("Overscan = ", overScan + " " + overScanInfo);
+
+Bias = Dialog.getChoice(); // Bias
+print("Bias to subtract = ", Bias);
+
+Decolor = Dialog.getChoice();
+if (Decolor == "deBayer") {
+	DecolorInfo = "db";
+} else if (Decolor == "deMosaic") {
+	DecolorInfo = "dm";
+}
+print("Color decoder = " + Decolor + " " + DecolorInfo);
+
+Norm = Dialog.getCheckbox(); // Normalize flat frame
+if (Norm) {
+	NormInfo="norm";
+} else {
+	NormInfo = "";
+}
+print("Normalize = " + Norm + " " + NormInfo);
+
+FitFunction = Dialog.getChoice();
+print("Fit functiion = ", FitFunction);
+
+
+// ********** Start find cal point **********
+
+if (RawTiff) {
+	if (overScan) {
+		run("DCRaw Reader...",
+			"open=[" + "] " +
+			"use_temporary_directory " +
+			"white_balance=[None] " +
+			"do_not_automatically_brighten " +
+			"output_colorspace=[raw] " +
+			"document_mode " +  // black borders (overscan area) or not
+			"document_mode_without_scaling " +
+		"read_as=[16-bit linear] " +
+		"interpolation=[High-speed, low-quality bilinear] " +
+	//	"half_size " +
+		"do_not_rotate " +
+	//	"show_metadata" +
+		"");
+	} else {	
+		run("DCRaw Reader...",
+		"open=[" + "] " +
+		"use_temporary_directory " +
+		"white_balance=[None] " +
+		"do_not_automatically_brighten " +
+		"output_colorspace=[raw] " +
+	//	"document_mode " +  // black borders (overscan area) or not
+		"document_mode_without_scaling " +
+		"read_as=[16-bit linear] " +
+		"interpolation=[High-speed, low-quality bilinear] " +
+	//	"half_size " +
+		"do_not_rotate " +
+	//	"show_metadata" +
+		"");
+	}
+
+	// Subtract Bias and Dark
+	run("Subtract...", "value=Bias");
+
+	rawImage = getImageID();
+
+	if (Decolor=="deBayer") { // debayer
+		run("Debayer Image", "order=R-G-R-G demosaicing=Replication radius=2 radius=2");
+		name=getTitle();
+		print("Image Name = ", name);
+		setSlice(2); // Green channel
+	} else if (Decolor=="deMosaic") { // demosaic, half size
+		dx=-1; // green1 channel
+		dy=0;
+		halfWidth = getWidth()/2;
+		halfHeight = getHeight()/2;
+
+		run("Duplicate...", "title=&name duplicate");
+		run("Translate...", "x=&dx y=&dy interpolation=None");
+		run("Size...", "width=&halfWidth height=&halfHeight depth=&1 interpolation=None");
+	} else {
+		print("Something wrong with color decoder !");
+	}
+
+	if (isOpen(rawImage)) {selectImage(rawImage); close();}
+} else {
+	print("Ready");
+	imageToAnalyze = File.openDialog("Select Tiff file to do analyze on"); // Tiff file suposed to be bias subtracted already
+	open(imageToAnalyze);
+}
+
+
+run("Gaussian Blur...", "sigma=25 slice"); // smooth image
+
+width = getWidth(); // get image size
+height = getHeight();
+
+CenterX=width/2; // FITS Coordinates, origo upper left
+CenterY=height/2;
+
+PointSize=50; // diameter of measuer point area
+origoOffset=PointSize/2;
+
+NumberOfPoints=9; // set at least grade of polynom + 1
+totalPoints=2*NumberOfPoints-1; // inclusive mirror on the oppostie diagonal, rotation symtric
+
+StartPosX=200; // keep it away from edges
+StartPosY=150;
+
+centerCoordinates = 0.2 ; // Center point coordinates
+makeRectangle((0.5-centerCoordinates)*width, (0.5-centerCoordinates)*height, (2*centerCoordinates)*width, (2*centerCoordinates)*height); // Part of image that is used as normal
+roiManager("Add");
+
+// run("8-bit");
+// getStatistics(area, mean, min, max, std, histogram);
+// Plot.create("Detecting Histogram Peaks", "X", "Y", histogram);
+// Plot.show;
+// maxLocs= Array.findMaxima(histogram, 500);
+// print("\\Clear");
+// print("\nMaxima (descending strength):");
+// for (jj= 0; jj < maxLocs.length; jj++){
+// x= maxLocs[jj];
+// y = histogram[x];
+// print("x= ", x, " y= ", y);
+// toUnscaled(x, y);
+// makeOval(x-5, y-5, 9, 9);
+// run("Invert");
+
+getRawStatistics(pix,mean,min,max,std,hist);
+
+print(" ");
+print("Center Coordinates mean ", mean,pix);
+print(" ");
+
+steps=totalPoints-1; // part of each step
+
+xCoordinate = newArray(totalPoints); // X coordinate
+yCoordinate = newArray(totalPoints); // Y coordinate
+
+xCenterDistance = newArray(totalPoints);
+yCenterDistance = newArray(totalPoints);
+
+radiusDistance = newArray(totalPoints);
+signal = newArray(totalPoints);
+
+for (i =0; i<=steps; i++) {
+	xCoordinate[i]=round((width-2*StartPosX)*i/steps+StartPosX); // X coordinate
+	yCoordinate[i]=round((height-2*StartPosY)*i/steps+StartPosY); // Y coordinate
+
+	if (i <NumberOfPoints) {
+		radiusDistance[i]=-round(sqrt((xCoordinate[i]-CenterX)*(xCoordinate[i]-CenterX)+(yCoordinate[i]-CenterY)*(yCoordinate[i]-CenterY))); // Radie distances from optical center
+		makeRectangle(xCoordinate[i]-origoOffset,yCoordinate[i]-origoOffset,PointSize,PointSize);
+		roiManager("Add");
+		getRawStatistics(pix,mean,min,max,std,hist);
+		signal[i] =mean; // mean value at point i
+	} else {
+		radiusDistance[i]=round(sqrt((xCoordinate[i]-CenterX)*(xCoordinate[i]-CenterX)+(yCoordinate[i]-CenterY)*(yCoordinate[i]-CenterY))); // Radie distances from optical center
+		signal[i] =signal[2*NumberOfPoints-2-i]; // mirror of first half, rotation symetric
+	}
+
+	print("Pos " + (i+1) + ", X coord " + xCoordinate[i] + ", Y coord " + yCoordinate[i] + ", Distance from Optical center " +radiusDistance[i] + ", Mean value " + signal[i]);
+}
+
+roiManager("Show All with labels");
+
+// normalize
+normalize = true ;
+
+Array.getStatistics(signal, min, max, mean, std);
+maxSignal=max;
+//signal=(signal/max);
+// Array.print(signal);
+
+Fit.doFit(FitFunction, radiusDistance , signal);
+numberOfParameters = Fit.nParams;
+Fit.logResults;
+Fit.plot;
+
+print(" ");
+print("Width = " + width + " Height = " + height); 
+print(" ");
+
+parameter = newArray(numberOfParameters);
+
+print("Number of parameters = ", numberOfParameters + ", only the even parameters are used because it's rotation symmetric");
+
+if (Norm) {
+	parameterNameNorm=newArray("an","bn","cn","dn","en","fn","gn","hn","in");
+	print(" ");
+	print("Parameters normalized");
+	print(" ");
+	print("Max signal = ", maxSignal);
+	print(" ");
+
+	for (pn=0; pn<numberOfParameters; pn+=2) {
+		print("Parameter normalized " + parameterNameNorm[pn] + " = ",  Fit.p(pn)/maxSignal);
+	}
+} else {
+	parameterName=newArray("a","b","c","d","e","f","g","h","i");
+	print(" ");
+	print("Parameters");
+	print(" ");
+	for (pn=0; pn<numberOfParameters; pn+=2) {
+		print("Parameter " + parameterName[pn] + " = ",  Fit.p(pn));
+	}
+}
+
+print(" ");
