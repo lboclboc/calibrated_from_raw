@@ -1,4 +1,11 @@
+// History:
+versionSoftware="Version: 20200325" // latest version
+print(versionSoftware); // latest
 
+// version 20200325
+// Can now save both Tiff and Fits file format
+// version 20200308
+// Beta release
 
 // ********** Dedault data ***********
 
@@ -19,6 +26,9 @@ var mosaicColorDef = newArray(5);
 var cameradataDef = 0 ;           // Default, change from menu
 var equipmentDef  = "date_object_etc"; // Extra info in file name
 
+DefsaveTiff = true; // Which format median stacked Tiff 32 bit float
+DefsaveFits = false; // Which format median stacked Fits 32 bit float
+
 makeStackAlignedImage();
 
 
@@ -34,12 +44,19 @@ Dialog.addChoice("     Aligne folder name :", aligneFolderDef, aligneFolderDef[0
 Dialog.addCheckbox("Add extra info to filename ?", cameradataDef);
 Dialog.addString("Date, Object etc :", equipmentDef);
 
-Dialog.addMessage("Which colors to demosaic and keep (only Flats) ?");
+Dialog.addMessage("Which colors to stack and keep ?");
 Dialog.addCheckbox("Red",                mosaicColorDef[0]);
 Dialog.addCheckbox("Green1",             mosaicColorDef[1]);
 Dialog.addCheckbox("Green2",             mosaicColorDef[2]);
 Dialog.addCheckbox("Blue",               mosaicColorDef[3]);
 Dialog.addCheckbox("Mono (mod cameras, during work !)", mosaicColorDef[4]);
+
+Dialog.addMessage("Which format to save median file in ?");
+Dialog.addCheckbox("Tiff 32 floating point", DefsaveTiff);
+Dialog.addCheckbox("Fits 32 floating point", DefsaveFits);
+
+Dialog.addMessage("Note: This is a Beta version !");
+Dialog.addMessage(versionSoftware);
 
 Dialog.show();
 
@@ -71,6 +88,12 @@ print("Keep Blue : ", mosaicColor[3]);
 
 mosaicColor[4] = Dialog.getCheckbox();
 print("Keep Mono : ", mosaicColor[4]);
+
+saveTiff = Dialog.getCheckbox();
+saveFits = Dialog.getCheckbox();
+
+print("Tiff = ",saveTiff);
+print("Fits = ",saveFits);
 
 // ********** Star of stacking process **********
 
@@ -134,7 +157,13 @@ for (i=0; i<=3; i++) {
 		print("Number of ", colorFilter[i], " image files to stack = ",  numberOfColorFiles);
 		run("Z Project...", "start=1 stop=numberOfColorFiles projection=Median");
 		fileIDstack = getImageID();
-		saveAs("Tiff", dirDestStack + "median" + colorFilter[i] + equipment);
+		if (saveTiff) {
+			saveAs("Tiff", dirDestStack + "median" + colorFilter[i] + equipment);
+		}
+		if (saveFits) {
+			saveAs("fits", dirDestStack + "median" + colorFilter[i] + equipment);
+		}
+
 		if (isOpen(fileIDvert)) {selectImage(fileIDvert); close(); }
 		if (isOpen(fileIDstack)) {selectImage(fileIDstack); close(); }
 	}
